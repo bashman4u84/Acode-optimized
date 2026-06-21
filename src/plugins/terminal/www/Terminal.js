@@ -15,8 +15,8 @@ const Terminal = {
 
         const failsafeArg = failsafe ? "--failsafe" : "";
 
-        const [initAlpine, rmWrapper, initSandbox] = await Promise.all([
-            readAsset("init-alpine.sh"),
+        const [initUbuntu, rmWrapper, initSandbox] = await Promise.all([
+            readAsset("init-ubuntu.sh"),
             readAsset("rm-wrapper.sh"),
             readAsset("init-sandbox.sh"),
         ]);
@@ -29,12 +29,12 @@ const Terminal = {
 }
         
 
-        await writeText(`${filesDir}/init-alpine.sh`, initAlpine);
+        await writeText(`${filesDir}/init-ubuntu.sh`, initUbuntu);
         await writeText(`${filesDir}/init-sandbox.sh`, initSandbox);
 
-        await deleteFile(`${filesDir}/alpine/bin/rm`).catch(() => {});
-        await writeText(`${filesDir}/alpine/bin/rm`, rmWrapper);
-        await setExec(`${filesDir}/alpine/bin/rm`, true);
+        await deleteFile(`${filesDir}/ubuntu/bin/rm`).catch(() => {});
+        await writeText(`${filesDir}/ubuntu/bin/rm`, rmWrapper);
+        await setExec(`${filesDir}/ubuntu/bin/rm`, true);
 
         if (installing) {
             return new Promise((resolve, reject) => {
@@ -107,7 +107,7 @@ const Terminal = {
     },
 
     /**
-     * Installs Alpine by downloading binaries and extracting the root filesystem.
+     * Installs Ubuntu by downloading binaries and extracting the root filesystem.
      * Also sets up additional dependencies for F-Droid variant.
      * @param {Function} [logger=console.log] - Function to log standard output.
      * @param {Function} [err_logger=console.error] - Function to log errors.
@@ -141,24 +141,24 @@ const Terminal = {
                 "arm64-v8a": {
                     libraryDirectory: "arm64",
                     axsArchitecture: "arm64",
-                    alpineDirectory: "aarch64",
-                    alpineFilename: "alpine-minirootfs-3.21.0-aarch64.tar.gz",
+                    ubuntuArchitecture: "arm64",
+                    ubuntuFilename: "ubuntu-base-24.04.4-base-arm64.tar.gz",
                     hasLibproot32: true
                 },
 
                 "armeabi-v7a": {
                     libraryDirectory: "arm32",
                     axsArchitecture: "armv7",
-                    alpineDirectory: "armhf",
-                    alpineFilename: "alpine-minirootfs-3.21.0-armhf.tar.gz",
+                    ubuntuArchitecture: "armhf",
+                    ubuntuFilename: "ubuntu-base-24.04.4-base-armhf.tar.gz",
                     hasLibproot32: false
                 },
 
                 "x86_64": {
                     libraryDirectory: "x64",
                     axsArchitecture: "x86_64",
-                    alpineDirectory: "x86_64",
-                    alpineFilename: "alpine-minirootfs-3.21.0-x86_64.tar.gz",
+                    ubuntuArchitecture: "amd64",
+                    ubuntuFilename: "ubuntu-base-24.04.4-base-amd64.tar.gz",
                     hasLibproot32: true
                 }
             };
@@ -169,9 +169,7 @@ const Terminal = {
                 throw new Error(`Unsupported architecture: ${arch}`);
             }
 
-            if(isFdroid === "true") {
-                const buildUrl = (...parts) => parts.join("");
-
+            const buildUrl = (...parts) => parts.join("");
 
             const strings = {
                 protocol: ["ht", "tps", ":", "//"],
@@ -192,15 +190,12 @@ const Terminal = {
                     "com"
                 ],
 
-                alpineDomain: [
-                    "dl",
-                    "-",
-                    "cdn",
+                ubuntuDomain: [
+                    "cdimage",
                     ".",
-                    "alpine",
-                    "linux",
+                    "ubuntu",
                     ".",
-                    "org"
+                    "com"
                 ],
 
                 acodeFoundation: [
@@ -233,75 +228,71 @@ const Terminal = {
                 }
             };
 
-            const rawGithubBase = buildUrl(
+            const ubuntuBase = buildUrl(
                 ...strings.protocol,
-                ...strings.rawGithubDomain,
-                "/",
-                ...strings.acodeFoundation,
-                "/",
-                ...strings.acodeRepo,
-                "/main/src/plugins/proot/libs/"
+                ...strings.ubuntuDomain,
+                "/ubuntu-base/releases/24.04/release/"
             );
 
-            const githubReleaseBase = buildUrl(
-                ...strings.protocol,
-                ...strings.githubDomain,
-                "/",
-                ...strings.bajrangCoder,
-                "/",
-                ...strings.acodexServer,
-                "/releases/latest/download/"
-            );
+            const ubuntuUrl = await resolveUbuntuRootfsUrl(ubuntuBase, architecture);
 
-            const alpineBase = buildUrl(
-                ...strings.protocol,
-                ...strings.alpineDomain,
-                "/alpine/v3.21/releases/"
-            );
+            logger("⬇️  Downloading Ubuntu filesystem...");
+            await downloadFile(ubuntuUrl, cordova.file.dataDirectory + "ubuntu.tar.gz", "Ubuntu filesystem");
 
-            const libraryBaseUrl = buildUrl(
-                rawGithubBase,
-                architecture.libraryDirectory,
-                "/"
-            );
+            if(isFdroid === "true") {
+                const rawGithubBase = buildUrl(
+                    ...strings.protocol,
+                    ...strings.rawGithubDomain,
+                    "/",
+                    ...strings.acodeFoundation,
+                    "/",
+                    ...strings.acodeRepo,
+                    "/main/src/plugins/proot/libs/"
+                );
 
-            const libproot = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.proot
-            );
+                const githubReleaseBase = buildUrl(
+                    ...strings.protocol,
+                    ...strings.githubDomain,
+                    "/",
+                    ...strings.bajrangCoder,
+                    "/",
+                    ...strings.acodexServer,
+                    "/releases/latest/download/"
+                );
 
-            const libTalloc = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.talloc
-            );
+                const libraryBaseUrl = buildUrl(
+                    rawGithubBase,
+                    architecture.libraryDirectory,
+                    "/"
+                );
 
-            const prootUrl = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.prootXed
-            );
-
-            const libproot32 = architecture.hasLibproot32
-                ? buildUrl(
+                const libproot = buildUrl(
                     libraryBaseUrl,
-                    ...strings.libraries.proot32
-                )
-                : null;
+                    ...strings.libraries.proot
+                );
 
-            const axsUrl = buildUrl(
-                githubReleaseBase,
-                "axs-pie-android-",
-                architecture.axsArchitecture
-            );
+                const libTalloc = buildUrl(
+                    libraryBaseUrl,
+                    ...strings.libraries.talloc
+                );
 
-            const alpineUrl = buildUrl(
-                alpineBase,
-                architecture.alpineDirectory,
-                "/",
-                architecture.alpineFilename
-            );
+                const prootUrl = buildUrl(
+                    libraryBaseUrl,
+                    ...strings.libraries.prootXed
+                );
 
-                logger("⬇️  Downloading sandbox filesystem...");
-                await downloadFile(alpineUrl, cordova.file.dataDirectory + "alpine.tar.gz", "Sandbox filesystem");
+                const libproot32 = architecture.hasLibproot32
+                    ? buildUrl(
+                        libraryBaseUrl,
+                        ...strings.libraries.proot32
+                    )
+                    : null;
+
+                const axsUrl = buildUrl(
+                    githubReleaseBase,
+                    "axs-pie-android-",
+                    architecture.axsArchitecture
+                );
 
                 logger("⬇️  Downloading axs...");
                 await downloadFile(axsUrl, cordova.file.dataDirectory + "axs", "AXS");
@@ -322,14 +313,6 @@ const Terminal = {
 
                 logger("✅  All downloads completed");
             }else{
-                logger("📦  Extracting assets...");
-                await new Promise((resolve, reject) => {
-                    system.extractAsset(`alpine_assets/${architecture.libraryDirectory}/alpine.rootfs`, `${filesDir}/alpine.tar.gz`, resolve, (e)=>{
-                        console.error(`Failed to extract alpine.tar.gz: ${formatError(e)}`);
-                        reject(e);
-                    });
-                });
-
                 try{
                     await Executor.execute("rm -f $PREFIX/axs && ln -s $NATIVE_DIR/libaxs.so $PREFIX/axs")
                 }catch(e){
@@ -337,26 +320,25 @@ const Terminal = {
                 }
             }
            
-
             logger("📁  Setting up directories...");
 
             await ensureDir(`${filesDir}/.downloaded`);
 
-            const alpineDir = `${filesDir}/alpine`;
+            const ubuntuDir = `${filesDir}/ubuntu`;
 
-            await ensureDir(alpineDir);
+            await ensureDir(ubuntuDir);
 
 
             logger("📦  Extracting sandbox filesystem...");
-            await Executor.execute(`tar --no-same-owner -xf ${filesDir}/alpine.tar.gz -C ${alpineDir}`);
+            await Executor.execute(`tar --no-same-owner -xf ${filesDir}/ubuntu.tar.gz -C ${ubuntuDir}`);
 
             logger("⚙️  Applying basic configuration...");
-            await writeText(`${alpineDir}/etc/resolv.conf`, `nameserver 8.8.4.4 \nnameserver 8.8.8.8`);
+            await writeText(`${ubuntuDir}/etc/resolv.conf`, `nameserver 8.8.4.4 \nnameserver 8.8.8.8`);
 
             const rmWrapper = await readAsset("rm-wrapper.sh");
-            await deleteFile(`${alpineDir}/bin/rm`).catch(() => {});
-            await writeText(`${alpineDir}/bin/rm`, rmWrapper);
-            await setExec(`${alpineDir}/bin/rm`, true);
+            await deleteFile(`${ubuntuDir}/bin/rm`).catch(() => {});
+            await writeText(`${ubuntuDir}/bin/rm`, rmWrapper);
+            await setExec(`${ubuntuDir}/bin/rm`, true);
 
             logger("✅  Extraction complete");
             await ensureDir(`${filesDir}/.extracted`);
@@ -378,7 +360,7 @@ const Terminal = {
     },
 
     /**
-     * Checks if alpine is already installed.
+     * Checks if Ubuntu is already installed.
      * @returns {Promise<boolean>} - Returns true if all required files and directories exist.
      */
     isInstalled() {
@@ -387,31 +369,31 @@ const Terminal = {
                 system.getFilesDir(resolve, reject);
             });
 
-            const alpineExists = await new Promise((resolve, reject) => {
-                system.fileExists(`${filesDir}/alpine`, false, (result) => {
+            const ubuntuExists = await new Promise((resolve, reject) => {
+                system.fileExists(`${filesDir}/ubuntu`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            const downloaded = alpineExists && await new Promise((resolve, reject) => {
+            const downloaded = ubuntuExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.downloaded`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            const extracted = alpineExists && await new Promise((resolve, reject) => {
+            const extracted = ubuntuExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.extracted`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            const configured = alpineExists && await new Promise((resolve, reject) => {
+            const configured = ubuntuExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.configured`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            resolve(alpineExists && downloaded && extracted && configured);
+            resolve(ubuntuExists && downloaded && extracted && configured);
         });
     },
 
@@ -427,12 +409,12 @@ const Terminal = {
         });
     },
     /**
-     * Creates a backup of the Alpine Linux installation
+     * Creates a backup of the Ubuntu installation
      * @async
      * @function backup
-     * @description Creates a compressed tar archive of the Alpine installation
+     * @description Creates a compressed tar archive of the Ubuntu installation
      * @returns {Promise<string>} Promise that resolves to the file URI of the created backup file (aterm_backup.tar)
-     * @throws {string} Rejects with "Alpine is not installed." if Alpine is not currently installed
+     * @throws {string} Rejects with "Ubuntu is not installed." if Ubuntu is not currently installed
      * @throws {string} Rejects with command output if backup creation fails
      * @example
      * try {
@@ -445,16 +427,16 @@ const Terminal = {
     backup() {
         return new Promise(async (resolve, reject) => {
             if (!await this.isInstalled()) {
-                reject("Alpine is not installed.");
+                reject("Ubuntu is not installed.");
                 return;
             }
             const cmd = `
             set -e
-            INCLUDE_FILES="alpine .downloaded .extracted .configured axs"
+            INCLUDE_FILES="ubuntu .downloaded .extracted .configured axs"
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES libtalloc.so.2 libproot-xed.so"
             fi
-            EXCLUDE="--exclude=alpine/data --exclude=alpine/system --exclude=alpine/vendor --exclude=alpine/sdcard --exclude=alpine/storage --exclude=alpine/public --exclude=alpine/apex --exclude=alpine/odm --exclude=alpine/product --exclude=alpine/system_ext --exclude=alpine/linkerconfig --exclude=alpine/proc --exclude=alpine/sys --exclude=alpine/dev --exclude=alpine/run --exclude=alpine/tmp"
+            EXCLUDE="--exclude=ubuntu/data --exclude=ubuntu/system --exclude=ubuntu/vendor --exclude=ubuntu/sdcard --exclude=ubuntu/storage --exclude=ubuntu/public --exclude=ubuntu/apex --exclude=ubuntu/odm --exclude=ubuntu/product --exclude=ubuntu/system_ext --exclude=ubuntu/linkerconfig --exclude=ubuntu/proc --exclude=ubuntu/sys --exclude=ubuntu/dev --exclude=ubuntu/run --exclude=ubuntu/tmp"
             tar -cf "$PREFIX/aterm_backup.tar" -C "$PREFIX" $EXCLUDE $INCLUDE_FILES
             echo "ok"
             `;
@@ -467,11 +449,11 @@ const Terminal = {
         });
     },
     /**
-     * Restores Alpine Linux installation from a backup file
+     * Restores Ubuntu installation from a backup file
      * @async
      * @function restore
-     * @description Restores the Alpine installation from a previously created backup file (aterm_backup.tar).
-     * This function stops any running Alpine processes, removes existing installation files, and extracts
+     * @description Restores the Ubuntu installation from a previously created backup file (aterm_backup.tar).
+     * This function stops any running Ubuntu processes, removes existing installation files, and extracts
      * the backup to restore the previous state. The backup file must exist in the expected location.
      * @returns {Promise<string>} Promise that resolves to "ok" when restoration completes successfully
      * @throws {string} Rejects with "Backup File does not exist" if aterm_backup.tar is not found
@@ -479,7 +461,7 @@ const Terminal = {
      * @example
      * try {
      *   await restore();
-     *   console.log("Alpine installation restored successfully");
+     *   console.log("Ubuntu installation restored successfully");
      * } catch (error) {
      *   console.error(`Restore failed: ${error}`);
      * }
@@ -493,7 +475,7 @@ const Terminal = {
             const cmd = `
             set -e
 
-            INCLUDE_FILES="$PREFIX/alpine $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
+            INCLUDE_FILES="$PREFIX/ubuntu $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
 
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES $PREFIX/libtalloc.so.2 $PREFIX/libproot-xed.so"
@@ -516,18 +498,18 @@ const Terminal = {
         });
     },
     /**
-     * Uninstalls the Alpine Linux installation
+     * Uninstalls the Ubuntu installation
      * @async
      * @function uninstall
-     * @description Completely removes the Alpine Linux installation from the device by deleting all
-     * Alpine-related files and directories. This function stops any running Alpine processes before
+     * @description Completely removes the Ubuntu installation from the device by deleting all
+     * Ubuntu-related files and directories. This function stops any running Ubuntu processes before
      * removal. NOTE: This does not perform cleanup of $PREFIX
      * @returns {Promise<string>} Promise that resolves to "ok" when uninstallation completes successfully
      * @throws {string} Rejects with command output if uninstallation fails
      * @example
      * try {
      *   await uninstall();
-     *   console.log("Alpine installation removed successfully");
+     *   console.log("Ubuntu installation removed successfully");
      * } catch (error) {
      *   console.error(`Uninstall failed: ${error}`);
      * }
@@ -541,7 +523,7 @@ const Terminal = {
             const cmd = `
             set -e
 
-            INCLUDE_FILES="$PREFIX/alpine $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
+            INCLUDE_FILES="$PREFIX/ubuntu $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
 
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES $PREFIX/libtalloc.so.2 $PREFIX/libproot-xed.so"
@@ -618,6 +600,54 @@ function deleteFile(path) {
 function setExec(path, executable) {
     return new Promise((resolve, reject) => {
         system.setExec(path, executable, resolve, reject);
+    });
+}
+
+async function resolveUbuntuRootfsUrl(baseUrl, architecture) {
+    const fallbackUrl = `${baseUrl}${architecture.ubuntuFilename}`;
+
+    try {
+        const checksums = await requestText(`${baseUrl}SHA256SUMS`);
+        const archName = architecture.ubuntuArchitecture;
+        const pattern = new RegExp(`ubuntu-base-([0-9]+(?:\\.[0-9]+)*)-base-${archName}\\.tar\\.gz`, "g");
+        const matches = [];
+        let match;
+
+        while ((match = pattern.exec(checksums)) !== null) {
+            matches.push({ filename: match[0], version: match[1] });
+        }
+
+        if (!matches.length) return fallbackUrl;
+
+        matches.sort((a, b) => compareVersions(b.version, a.version));
+        return `${baseUrl}${matches[0].filename}`;
+    } catch (error) {
+        console.warn("Failed to resolve latest Ubuntu Base rootfs; using fallback", error);
+        return fallbackUrl;
+    }
+}
+
+function compareVersions(a, b) {
+    const left = String(a).split(".").map((part) => Number.parseInt(part, 10) || 0);
+    const right = String(b).split(".").map((part) => Number.parseInt(part, 10) || 0);
+    const length = Math.max(left.length, right.length);
+
+    for (let i = 0; i < length; i++) {
+        const diff = (left[i] || 0) - (right[i] || 0);
+        if (diff !== 0) return diff;
+    }
+
+    return 0;
+}
+
+function requestText(url) {
+    return new Promise((resolve, reject) => {
+        cordova.plugin.http.sendRequest(
+            url,
+            { method: "GET", responseType: "text" },
+            (response) => resolve(String(response.data || "")),
+            (error) => reject(new Error(formatError(error)))
+        );
     });
 }
 
