@@ -15,7 +15,7 @@ export const systemsServers: LspServerManifest[] = [
 		checkCommand: "which clangd",
 		installer: installers.apk({
 			executable: "clangd",
-			packages: ["clang-extra-tools"],
+			packages: ["clangd"],
 		}),
 		enabled: false,
 	}),
@@ -28,7 +28,7 @@ export const systemsServers: LspServerManifest[] = [
 		checkCommand: "which gopls",
 		installer: installers.apk({
 			executable: "gopls",
-			packages: ["go", "gopls"],
+			packages: ["golang-go", "golang-golang-x-tools-gopls"],
 		}),
 		initializationOptions: {
 			usePlaceholders: false,
@@ -85,7 +85,7 @@ export const systemsServers: LspServerManifest[] = [
 		checkCommand: "which rust-analyzer",
 		installer: installers.apk({
 			executable: "rust-analyzer",
-			packages: ["rust", "cargo", "rust-analyzer"],
+			packages: ["rustc", "cargo", "rust-analyzer"],
 		}),
 		initializationOptions: {
 			cargo: {
