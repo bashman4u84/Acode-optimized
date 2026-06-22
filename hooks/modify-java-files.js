@@ -5,7 +5,7 @@ const prettier = require('prettier');
 main();
 
 async function main() {
-  const patchVersion = '2';
+  const patchVersion = '3';
   const flagFile = path.resolve(__dirname, '../platforms/android/.flag_done');
   if (fs.existsSync(flagFile)) {
     const appliedVersion = fs.readFileSync(flagFile, 'utf8').trim();
@@ -436,6 +436,17 @@ async function main() {
 
       console.log(`${files[file]} updated`);
     });
+  }
+
+  // Patch CoreAndroid.java for BAKLAVA constant if it exists
+  const coreAndroidPath = `${base}/CoreAndroid.java`;
+  if (fs.existsSync(coreAndroidPath)) {
+    let coreAndroidContent = fs.readFileSync(coreAndroidPath, 'utf8');
+    if (coreAndroidContent.includes('Build.VERSION_CODES.BAKLAVA')) {
+      coreAndroidContent = coreAndroidContent.replace('Build.VERSION_CODES.BAKLAVA', '36');
+      fs.writeFileSync(coreAndroidPath, coreAndroidContent, 'utf8');
+      console.log('[Cordova Hook] ✅ Patched Build.VERSION_CODES.BAKLAVA to 36 in CoreAndroid.java');
+    }
   }
 
   fs.writeFile(flagFile, patchVersion, err => {

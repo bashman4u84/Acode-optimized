@@ -88,7 +88,7 @@ RED=''
 NC=''
 
 script1="node ./utils/config.js $mode $app"
-script2="rspack --mode $webpackmode"
+script2="npx rspack --mode $webpackmode"
 # script3="node ./utils/loadStyles.js"
 
 echo "type : $packageType"
