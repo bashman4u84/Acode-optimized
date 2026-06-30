@@ -79,6 +79,9 @@ export const $toggler = (
 export const $input = (
 	<textarea
 		autocapitalize="none"
+		autocorrect="off"
+		autocomplete="off"
+		spellcheck="false"
 		style={{
 			opacity: 0,
 			height: 0,
