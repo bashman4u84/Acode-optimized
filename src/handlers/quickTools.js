@@ -44,8 +44,16 @@ const events = {
 
 quickTools.$input.addEventListener("input", (e) => {
 	const key = e.target.value.toUpperCase();
-	quickTools.$input.value = "";
-	if (!key || key.length > 1) return;
+	// Clear asynchronously so Android IME finishes its event cycle
+	// before the value is reset — prevents the next keystroke from being swallowed
+	queueMicrotask(() => { quickTools.$input.value = ""; });
+	if (!key) return;
+	// Handle multi-character IME input (e.g. composed text)
+	if (key.length > 1) {
+		resetKeys();
+		insertText(key);
+		return;
+	}
 	const keyCombination = getKeys({ key });
 
 	if (

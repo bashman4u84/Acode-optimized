@@ -116,6 +116,7 @@ async function EditorManager($header, $body) {
 	let touchSelectionController = null;
 	let touchSelectionSyncRaf = 0;
 	let nativeContextMenuDisabled = null;
+	let pendingStateChangedRaf = 0;
 	const recoverableWarningKeys = new Set();
 
 	function warnRecoverable(message, error, key) {
@@ -191,6 +192,8 @@ async function EditorManager($header, $body) {
 
 	const pointerCursorVisibilityExtension = EditorView.updateListener.of(
 		(update) => {
+			// Fast path: skip entirely during normal typing (no selection change)
+			if (!update.selectionSet) return;
 			if (!update.transactions.length) return;
 			const pointerTriggered = update.transactions.some(
 				(tr) =>
@@ -204,7 +207,6 @@ async function EditorManager($header, $body) {
 				clearScrollbarScrollLock();
 				return;
 			}
-			if (!update.selectionSet) return;
 			requestAnimationFrame(() => {
 				if (isCursorRevealSuppressed()) return;
 				if (!isCursorVisible()) scrollCursorIntoView({ behavior: "instant" });
@@ -227,6 +229,8 @@ async function EditorManager($header, $body) {
 	const touchSelectionUpdateExtension = EditorView.updateListener.of(
 		(update) => {
 			if (!touchSelectionController) return;
+			// Fast path: skip entirely during normal typing (no selection change)
+			if (!update.selectionSet) return;
 			const pointerTriggered = update.transactions.some(
 				(tr) =>
 					tr.isUserEvent("pointer") ||
@@ -235,15 +239,13 @@ async function EditorManager($header, $body) {
 					tr.isUserEvent("touch") ||
 					tr.isUserEvent("select.touch"),
 			);
-			if (update.selectionSet || pointerTriggered) {
-				cancelAnimationFrame(touchSelectionSyncRaf);
-				touchSelectionSyncRaf = requestAnimationFrame(() => {
-					touchSelectionController?.onStateChanged({
-						pointerTriggered,
-						selectionChanged: update.selectionSet,
-					});
+			cancelAnimationFrame(touchSelectionSyncRaf);
+			touchSelectionSyncRaf = requestAnimationFrame(() => {
+				touchSelectionController?.onStateChanged({
+					pointerTriggered,
+					selectionChanged: true,
 				});
-			}
+			});
 		},
 	);
 	const baseExtensionDefaults = {
@@ -582,7 +584,7 @@ async function EditorManager($header, $body) {
 				const live = !!appSettings?.value?.liveAutoCompletion;
 				return autocompletion({
 					activateOnTyping: live,
-					activateOnTypingDelay: isCoarsePointerDevice() ? 220 : 100,
+					activateOnTypingDelay: isCoarsePointerDevice() ? 120 : 75,
 				});
 			},
 		},
@@ -2092,7 +2094,14 @@ async function EditorManager($header, $body) {
 			if (!file || file.type !== "editor") return;
 
 			if (update.docChanged) {
-				events.emit("editor-state-changed", update.view);
+				// Defer state-changed event to rAF to avoid blocking input
+				if (!pendingStateChangedRaf) {
+					const view = update.view;
+					pendingStateChangedRaf = requestAnimationFrame(() => {
+						pendingStateChangedRaf = 0;
+						events.emit("editor-state-changed", view);
+					});
+				}
 			}
 
 			// Only run expensive work when the document actually changed

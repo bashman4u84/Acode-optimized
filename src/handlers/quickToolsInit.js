@@ -86,7 +86,14 @@ export default function init() {
 		$footer.removeAttribute("data-unsaved");
 	});
 
-	editorManager.on("editor-state-changed", updateHistoryButtons);
+	let historyUpdateRaf = 0;
+	editorManager.on("editor-state-changed", () => {
+		if (historyUpdateRaf) return;
+		historyUpdateRaf = requestAnimationFrame(() => {
+			historyUpdateRaf = 0;
+			updateHistoryButtons();
+		});
+	});
 
 	appSettings.on("update:quicktoolsItems:after", () => {
 		setTimeout(updateHistoryButtons, 100);
